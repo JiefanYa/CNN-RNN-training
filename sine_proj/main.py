@@ -265,18 +265,17 @@ class SubMLP(nn.Module):
         self.num_layers = lstm_params['num_mst_layers']
         fc_layers = []
         for i in range(self.num_layers):
-            if i == 0:
-                input_dim = lstm_params['delta'][3]
-                output_dim = lstm_params['l' + str(i+1) + '_out_dim']
-            elif i == self.num_layers-1:
-                input_dim = lstm_params['l' + str(i) + '_out_dim']
-                output_dim = lstm_params['lstm_dim']
-            else:
-                input_dim = lstm_params['l' + str(i) + '_out_dim']
-                output_dim = lstm_params['l' + str(i+1) + '_out_dim']
+
+            input_dim = lstm_params['delta'][3] if i == 0 \
+                else lstm_params['l' + str(i) + '_out_dim']
+            output_dim = lstm_params['lstm_dim'] if i == self.num_layers-1 \
+                else lstm_params['l' + str(i+1) + '_out_dim']
+
             fc_layers.append(nn.Linear(input_dim, output_dim))
+
             if i != self.num_layers-1:
                 fc_layers.append(nn.ReLU())
+
         self.layers = nn.ModuleList(fc_layers)
 
     def forward(self, x):
@@ -441,3 +440,8 @@ if __name__ == "__main__":
             training=False,
             epochs=10,
             eval='all')
+
+
+# Potential improvements:
+# 1. plot train vs. val loss over epochs
+# 2. add learning_rate decay mechanism
