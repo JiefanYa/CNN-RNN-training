@@ -10,8 +10,9 @@ import wandb
 device = torch.device('cpu')
 dtype = torch.float32
 
-# wandb.init(entity="wandb", project="lstm-sine")
-
+wandb.init(project="lstm-sine")
+# Run the following on command line to login wandb:
+# > wandb login d7e8781caed043d0074b60241ebad59d949bd214
 
 class SineWaveDataset(Dataset):
 
@@ -20,7 +21,7 @@ class SineWaveDataset(Dataset):
         Inputs:
         - data_in: Input sine waves of shape (x, IN)
         - data_out: Output sine waves of shape (x, OUT)
-        - train: whether this is validation vs. test set
+        - train: Flag for train/validation vs. test set
         """
         if data_in.shape[0] != data_out.shape[0]:
             raise Exception('data dimension conflict!')
@@ -46,8 +47,8 @@ def buildData(x, delta, in_num, out_num, type, dir):
     - delta: Linspace of the sine waves, number of separation = in_num, out_num
     - in_num: Number of input numbers in the interval defined by delta
     - out_num: Number of output numbers in the interval defined by delta
-    - type: data type (train/val/test)
-    - dir: directory to save data
+    - type: Data type (train/val/test)
+    - dir: Directory to save data
 
     Returns a tuple of:
     - input: Input sine waves of shape (x, IN)
@@ -57,15 +58,11 @@ def buildData(x, delta, in_num, out_num, type, dir):
     frequency = np.random.randn(x) + 1
     frequency[frequency == 0] = 1
 
-    # frequency = np.ones_like(frequency)
-
     # amplitude A
     amplitude = (np.random.randn(x) + 1) * 2
     amplitude[amplitude == 0] = 1
     # phase Phi
     phase = np.random.randn(x) * np.pi
-
-    # phase = np.zeros_like(phase)
 
     # ndarray that stores these parameters
     params = np.zeros((x, 3))
@@ -135,10 +132,10 @@ def visualize(input, gt, delta=None, output=None, index=None):
 
     Inputs:
     - input: Input sine waves of shape (x, IN)
-    - gt: ground truth output of shape (x, OUT)
+    - gt: Ground truth output of shape (x, OUT)
     - output: Predicted output of shape (x, OUT), default None
     - delta: Linspace of the sine waves, number of separation = IN + OUT
-    - index: array of indices of sine waves to show, or False to show all,
+    - index: Array of indices of sine waves to show, or False to show all,
             or a number of random sine waves to show
     """
     if index is None:
@@ -174,11 +171,11 @@ def train(model, optimizer, loader_train, loader_val, file, epochs=10, print_eve
     Inputs:
     - model: torch.nn.module
     - optimizer: torch.optim
-    - loader_train: training dataloader
-    - loader_val: validation dataloader
-    - file: path to save trained model
-    - epochs: number of epochs to train
-    - print_every: accuracy logging frequency
+    - loader_train: Training data
+    - loader_val: Validation data
+    - file: Path to save trained model
+    - epochs: Number of epochs to train
+    - print_every: Accuracy logging frequency
     """
     print("Training starts.")
     print()
@@ -204,6 +201,7 @@ def train(model, optimizer, loader_train, loader_val, file, epochs=10, print_eve
 
 
     torch.save(model.state_dict(), file)
+    torch.save(model.state_dict(), os.path.join(wandb.run.dir, 'model.pt'))
     print("Training complete. Model saved to disk.")
     print()
 
@@ -213,9 +211,9 @@ def evaluate(loader, model, delta=None):
     Compute loss on validation/test set.
 
     Inputs:
-    - loader: Dataloader containing data
+    - loader: Data
     - model: torch.nn.module
-    - delta: linspace to aid visualization, None to stop drawing charts
+    - delta: Linspace to aid visualization, None to stop drawing charts
     """
     if loader.dataset.train:
         print('Checking loss on Validation set')
@@ -237,8 +235,9 @@ def evaluate(loader, model, delta=None):
             count = t + 1
 
         print('Got average loss: %.4f' % (loss / count))
+        wandb.log({"Average loss": loss / count})
 
-    # get a random batch from loader, assume batch_size > 10
+    # get a random batch from loader, pick 10 sine waves to draw
     if delta != None:
         print("Drawing charts.")
         with torch.no_grad():
@@ -255,6 +254,12 @@ def evaluate(loader, model, delta=None):
 class SubMLP(nn.Module):
 
     def __init__(self, lstm_params):
+        """
+        Sub MLP module contained in SineWaveLSTM.
+
+        Inputs:
+        - lstm_params: Dict storing parameters of the network
+        """
         super().__init__()
 
         self.num_layers = lstm_params['num_mst_layers']
@@ -275,22 +280,27 @@ class SubMLP(nn.Module):
         self.layers = nn.ModuleList(fc_layers)
 
     def forward(self, x):
-        retval = x
+        """
+        Inputs:
+        - x: Input of shape (batch_size, input_dim)
+
+        Returns:
+        - out: Output of shape (batch_size, lstm_dim)
+        """
+        out = x
         for layer in self.layers:
-            retval = layer(retval)
-        return retval
+            out = layer(out)
+        return out
 
 
 class SineWaveLSTM(nn.Module):
 
     def __init__(self, lstm_params):
         """
+        Sine wave LSTM network.
+
         Inputs:
-        - input_dim: input dimension
-        - embed_dim: embedding dimension
-        - hidden_dim: hidden state dimension
-        - output_dim: output dimension
-        - sequence_num: number of time steps of output
+        - lstm_params: Dict storing parameters of the network
         """
         super().__init__()
 
@@ -310,10 +320,10 @@ class SineWaveLSTM(nn.Module):
     def forward(self, x):
         """
         Inputs:
-        - x: input of shape (batch_size, input_dim)
+        - x: Input of shape (batch_size, input_dim)
 
         Returns:
-        - out: computed output (1D) on each time step (batch_size, sequence_num)
+        - out: Output (1D) on each time step (batch_size, sequence_num)
         """
         embed = self.mlp(x)
         embed_stack = torch.stack([embed] * self.sequence_num, dim=1)
@@ -326,18 +336,34 @@ class SineWaveLSTM(nn.Module):
 def runLSTM(
     data_params,
     lstm_params,
-    dir=os.path.dirname(__file__),
     new_data=True,
     batch_size=64,
     load_model=False,
     training=True,
-    overfit=False,
     learning_rate=4e-3,
     epochs=15,
     print_every=100,
-    debug=False
+    debug=False,
+    eval='test'
 ):
+    """
+    Driver function to run LSTM network.
 
+    Inputs:
+    - data_params: Dict storing dataset parameters
+    - lstm_params: Dict storing network parameters
+    - new_data: Flag to build new data or use old ones
+    - batch_size: Batch size for network
+    - load_model: Flag to load trained parameters
+    - training: Flag to train the network
+    - learning_rate: Fixed learning rate
+    - Epochs: Number of epochs to train
+    - print_every: Accuray logging frequency
+    - debug: Flag to turn on DEBUG mode
+    - eval: Inference dataset
+    """
+
+    dir = os.path.dirname(__file__)
     dataset_dir = os.path.join(dir, './data')
     model_path = os.path.join(dir, 'model.pt')
 
@@ -361,30 +387,31 @@ def runLSTM(
     model = SineWaveLSTM(lstm_params)
 
     if load_model:
+        # load pre-trained parameters
         model.load_state_dict(torch.load(model_path))
+
+    wandb.watch(model, log="all")
 
     if training:
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         train(model, optimizer, loader_train, loader_val, model_path, epochs=epochs, print_every=print_every)
 
     if debug:
-        print("Model's named parameters")
-        for n, p in model.named_parameters():
-            print(n, "\t", p.shape)
         print("Model's state_dict:")
         for param_tensor in model.state_dict():
             print(param_tensor, "\t", model.state_dict()[param_tensor].size())
 
-        evaluate(loader_train, model, delta=delta)
-        evaluate(loader_val, model)
-        evaluate(loader_test, model)
-
-    if overfit:
+    if eval == 'test':
         # check on train data
-        evaluate(loader_train, model, delta=delta)
-    else:
+        evaluate(loader_test, model, delta=delta)
+    elif eval == 'overfit':
         # check on test data
         evaluate(loader_test, model, delta=delta)
+    elif eval == 'all':
+        # check accuracy on all sets
+        evaluate(loader_train, model)
+        evaluate(loader_val, model)
+        evaluate(loader_test, model)
 
 
 if __name__ == "__main__":
@@ -393,10 +420,10 @@ if __name__ == "__main__":
     data_params['train_num'] = 5000
     data_params['val_num'] = 500
     data_params['test_num'] = 500
-    data_params['delta'] = [0,2*np.pi,50,20,30]
+    data_params['delta'] = [0,2*np.pi,50,10,40]
 
     lstm_params = {}
-    lstm_params['delta'] = [0,2*np.pi,50,20,30]
+    lstm_params['delta'] = [0,2*np.pi,50,10,40]
     lstm_params['num_mst_layers'] = 3
     lstm_params['num_lstm_layers'] = 2
     lstm_params['l1_out_dim'] = 256
@@ -407,10 +434,10 @@ if __name__ == "__main__":
     runLSTM(data_params=data_params,
             lstm_params=lstm_params,
             batch_size=64,
-            new_data=True,
-            load_model=False,
-            training=True,
-            overfit=True,
-            epochs=15,
-            debug=False)
-
+            print_every=50,
+            learning_rate=1e-3,
+            new_data=False,
+            load_model=True,
+            training=False,
+            epochs=10,
+            eval='all')
