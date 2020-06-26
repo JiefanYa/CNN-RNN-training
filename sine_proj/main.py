@@ -11,7 +11,6 @@ device = torch.device('cpu')
 dtype = torch.float32
 
 # wandb.init(entity="wandb", project="lstm-sine")
-# TODO: finish wandb setup
 
 
 class SineWaveDataset(Dataset):
@@ -200,15 +199,16 @@ def train(model, optimizer, loader_train, loader_val, file, epochs=10, print_eve
 
             if t % print_every == 0:
                 print('Epoch %d, Iteration %d, loss = %.4f' % (e, t, loss.item()))
-                check_loss(loader_val, model)
+                evaluate(loader_val, model)
                 print()
+
 
     torch.save(model.state_dict(), file)
     print("Training complete. Model saved to disk.")
     print()
 
 
-def check_loss(loader, model, delta=None):
+def evaluate(loader, model, delta=None):
     """
     Compute loss on validation/test set.
 
@@ -258,29 +258,26 @@ class SubMLP(nn.Module):
         super().__init__()
 
         self.num_layers = lstm_params['num_mst_layers']
-        self.layers = {}
-        for i in range(self.num_layers-1):
-            if i==0:
+        fc_layers = []
+        for i in range(self.num_layers):
+            if i == 0:
                 input_dim = lstm_params['delta'][3]
                 output_dim = lstm_params['l' + str(i+1) + '_out_dim']
+            elif i == self.num_layers-1:
+                input_dim = lstm_params['l' + str(i) + '_out_dim']
+                output_dim = lstm_params['lstm_dim']
             else:
                 input_dim = lstm_params['l' + str(i) + '_out_dim']
                 output_dim = lstm_params['l' + str(i+1) + '_out_dim']
-            self.layers['fc'+str(i+1)] = nn.Linear(input_dim, output_dim)
-            nn.init.kaiming_normal_(self.layers['fc'+str(i+1)].weight)
-            self.layers['relu'+str(i+1)] = nn.ReLU()
-
-        input_dim = lstm_params['l'+str(self.num_layers-1)+'_out_dim']
-        output_dim = lstm_params['lstm_dim']
-        self.layers['fc'+str(self.num_layers)] = nn.Linear(input_dim, output_dim)
-        nn.init.kaiming_normal_(self.layers['fc'+str(self.num_layers)].weight)
+            fc_layers.append(nn.Linear(input_dim, output_dim))
+            if i != self.num_layers-1:
+                fc_layers.append(nn.ReLU())
+        self.layers = nn.ModuleList(fc_layers)
 
     def forward(self, x):
         retval = x
-        for i in range(self.num_layers-1):
-            retval = self.layers['fc'+str(i+1)](retval)
-            retval = self.layers['relu'+str(i+1)](retval)
-        retval  = self.layers['fc'+str(self.num_layers)](retval)
+        for layer in self.layers:
+            retval = layer(retval)
         return retval
 
 
@@ -337,7 +334,8 @@ def runLSTM(
     overfit=False,
     learning_rate=4e-3,
     epochs=15,
-    print_every=100
+    print_every=100,
+    debug=False
 ):
 
     dataset_dir = os.path.join(dir, './data')
@@ -369,12 +367,24 @@ def runLSTM(
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         train(model, optimizer, loader_train, loader_val, model_path, epochs=epochs, print_every=print_every)
 
+    if debug:
+        print("Model's named parameters")
+        for n, p in model.named_parameters():
+            print(n, "\t", p.shape)
+        print("Model's state_dict:")
+        for param_tensor in model.state_dict():
+            print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+
+        evaluate(loader_train, model, delta=delta)
+        evaluate(loader_val, model)
+        evaluate(loader_test, model)
+
     if overfit:
         # check on train data
-        check_loss(loader_train, model, delta=delta)
+        evaluate(loader_train, model, delta=delta)
     else:
         # check on test data
-        check_loss(loader_test, model, delta=delta)
+        evaluate(loader_test, model, delta=delta)
 
 
 if __name__ == "__main__":
@@ -396,9 +406,11 @@ if __name__ == "__main__":
 
     runLSTM(data_params=data_params,
             lstm_params=lstm_params,
-            new_data=False,
-            load_model=True,
-            training=False,
-            overfit=False,
-            epochs=15)
+            batch_size=64,
+            new_data=True,
+            load_model=False,
+            training=True,
+            overfit=True,
+            epochs=15,
+            debug=False)
 
