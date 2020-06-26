@@ -12,7 +12,7 @@ dtype = torch.float32
 
 wandb.init(project="lstm-sine")
 # Run the following on command line to login wandb:
-# > wandb login d7e8781caed043d0074b60241ebad59d949bd214
+# > wandb login ########################################
 
 class SineWaveDataset(Dataset):
 

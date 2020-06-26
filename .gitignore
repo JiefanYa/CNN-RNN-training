@@ -140,3 +140,6 @@ dmypy.json
 **/coco_captioning
 **/squeezenet_tf2
 *.npz
+
+# wandb
+**/wandb
