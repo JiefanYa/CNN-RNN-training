@@ -10,9 +10,6 @@ import wandb
 device = torch.device('cpu')
 dtype = torch.float32
 
-wandb.init(project="lstm-sine")
-# Run the following on command line to login wandb:
-# > wandb login ########################################
 
 class SineWaveDataset(Dataset):
 
@@ -415,6 +412,8 @@ def runLSTM(
 
 if __name__ == "__main__":
 
+    wandb.init(project="lstm-sine")
+
     data_params = {}
     data_params['train_num'] = 5000
     data_params['val_num'] = 500
@@ -439,7 +438,7 @@ if __name__ == "__main__":
             load_model=True,
             training=False,
             epochs=10,
-            eval='all')
+            eval='test')
 
 
 # Potential improvements:
