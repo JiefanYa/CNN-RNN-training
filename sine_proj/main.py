@@ -398,11 +398,11 @@ def runLSTM(
             print(param_tensor, "\t", model.state_dict()[param_tensor].size())
 
     if eval == 'test':
-        # check on train data
-        evaluate(loader_test, model, delta=delta)
-    elif eval == 'overfit':
         # check on test data
         evaluate(loader_test, model, delta=delta)
+    elif eval == 'overfit':
+        # check on train data
+        evaluate(loader_train, model, delta=delta)
     elif eval == 'all':
         # check accuracy on all sets
         evaluate(loader_train, model)
