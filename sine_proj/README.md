@@ -27,7 +27,7 @@ After around 40 epochs, average loss on the test dataset reaches around 0.0803.
 
 <p align="center">
 <img src="jpg/output1.png" width=390></img>
-<img src="jpg/output2.png" width=390></img>
+<img src="jpg/output5.png" width=390></img>
 <img src="jpg/output3.png" width=390></img>
 <img src="jpg/output4.png" width=390></img>
 </p>
