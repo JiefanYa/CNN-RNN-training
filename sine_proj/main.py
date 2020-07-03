@@ -436,7 +436,7 @@ if __name__ == "__main__":
             learning_rate=1e-3,
             new_data=False,
             load_model=True,
-            training=False,
+            training=True,
             epochs=10,
             eval='test')
 
